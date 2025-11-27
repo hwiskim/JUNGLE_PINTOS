@@ -1,0 +1,49 @@
+name: Pintos VM CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential qemu-system-x86
+
+      - name: Setup Pintos
+        run: |
+          cd pintos
+          source activate
+
+      - name: Build VM
+        run: |
+          cd pintos/vm
+          make clean || true
+          make
+
+      - name: Run VM tests
+        run: |
+          cd pintos/vm
+          make check
+        continue-on-error: true
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check code style (optional)
+        run: |
+          echo "Code style check placeholder"
+          # 필요시 clang-format 등 추가
