@@ -7,9 +7,9 @@ main (배포용, 안정 버전)
   │
   └── develop (통합 브랜치)
         │
-        ├── feature/1-spt-basic
-        ├── feature/1-lazy-loading
-        ├── fix/1-page-fault-crash
+        ├── feature/1-username-sptBasic
+        ├── feature/1-username-lazyLoading
+        ├── fix/1-username-pageFaultCrash
         └── ...
 ```
 
@@ -18,17 +18,17 @@ main (배포용, 안정 버전)
 ### 형식
 
 ```
-<type>/<milestone#>-<간단한-설명>
+<type>/<milestone#>-<github-username>-<description(camelCase)>
 ```
 
 ### Type
 
 | Prefix | 용도 | 예시 |
 |--------|------|------|
-| `feature/` | 새 기능 개발 | `feature/1-spt-init` |
-| `fix/` | 버그 수정 | `fix/1-null-pointer` |
-| `refactor/` | 코드 리팩토링 | `refactor/vm-cleanup` |
-| `chore/` | CI, 설정, 빌드 등 | `chore/ci-update` |
+| `feature/` | 새 기능 개발 | `feature/1-username-sptInit` |
+| `fix/` | 버그 수정 | `fix/1-username-nullPointer` |
+| `refactor/` | 코드 리팩토링 | `refactor/1-username-vmCleanup` |
+| `chore/` | CI, 설정, 빌드 등 | `chore/username-ciUpdate` |
 
 ### Milestone 번호
 
@@ -45,13 +45,13 @@ main (배포용, 안정 버전)
 ### 예시
 
 ```bash
-feature/1-spt-basic           # Milestone 1: SPT 기본 구조
-feature/1-lazy-loading        # Milestone 1: Lazy loading
-feature/1-setup-stack         # Milestone 1: 스택 설정
-feature/2-mmap-syscall        # Milestone 2: mmap 시스템콜
-fix/1-frame-allocation-bug    # Milestone 1 버그 수정
-refactor/1-spt-hash-table     # Milestone 1 리팩토링
-chore/ci-test-timeout         # CI 설정 변경
+feature/1-username-sptBasic            # Milestone 1: SPT 기본 구조
+feature/1-username-lazyLoading         # Milestone 1: Lazy loading
+feature/1-username-setupStack          # Milestone 1: 스택 설정
+feature/2-username-mmapSyscall         # Milestone 2: mmap 시스템콜
+fix/1-username-frameAllocationBug      # Milestone 1 버그 수정
+refactor/1-username-sptHashTable       # Milestone 1 리팩토링
+chore/username-ciTestTimeout           # CI 설정 변경
 ```
 
 ## Branch 생성 기준
@@ -71,7 +71,7 @@ chore/ci-test-timeout         # CI 설정 변경
 ```bash
 git checkout develop
 git pull origin develop
-git checkout -b feature/1-spt-basic
+git checkout -b feature/1-username-sptBasic
 ```
 
 ### 2. 작업 및 커밋
@@ -85,7 +85,7 @@ git commit -m "Add SPT hash table structure"
 ### 3. Push 및 PR 생성
 
 ```bash
-git push origin feature/1-spt-basic
+git push origin feature/1-username-sptBasic
 ```
 
 PR 생성 시 본문에 이슈 연결:
@@ -110,4 +110,4 @@ closes #2
 - `main` 브랜치에 직접 push 금지
 - `develop` 브랜치에 직접 push는 작은 수정만
 - PR merge 전 CI 통과 확인
-- 브랜치명은 영어 소문자, 하이픈(-) 사용
+- 브랜치명은 영어, 하이픈(-) 사용 (설명은 camelCase)
