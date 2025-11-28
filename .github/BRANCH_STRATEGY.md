@@ -13,9 +13,9 @@ main (배포용, 안정 버전)
   │
   └── develop (통합 브랜치)
         │
-        ├── milestone/1-vmInfra
-        ├── milestone/2-mmapBasic
-        ├── milestone/3-fileBacked
+        ├── m1-username-vmInfra
+        ├── m2-username-mmapBasic
+        ├── m3-username-fileBacked
         └── ...
 ```
 
@@ -24,20 +24,20 @@ main (배포용, 안정 버전)
 ### 형식
 
 ```
-milestone/<milestone#>-<description(camelCase)>
+m<milestone#>-<github-username>-<description(camelCase)>
 ```
 
 ### Milestone 목록
 
-| # | Milestone | 브랜치명 |
-|---|-----------|----------|
-| 1 | VM 기본 인프라 (P2 회귀 복구) | `milestone/1-vmInfra` |
-| 2 | Memory Mapped Files 기본 | `milestone/2-mmapBasic` |
-| 3 | File-backed Page | `milestone/3-fileBacked` |
-| 4 | Memory Mapped Files 완성 | `milestone/4-mmapComplete` |
-| 5 | Swap 인프라 | `milestone/5-swapInfra` |
-| 6 | Swap 완성 | `milestone/6-swapComplete` |
-| 7 | Copy-on-Write (Extra) | `milestone/7-cow` |
+| # | Milestone | 브랜치명 예시 |
+|---|-----------|---------------|
+| 1 | VM 기본 인프라 (P2 회귀 복구) | `m1-username-vmInfra` |
+| 2 | Memory Mapped Files 기본 | `m2-username-mmapBasic` |
+| 3 | File-backed Page | `m3-username-fileBacked` |
+| 4 | Memory Mapped Files 완성 | `m4-username-mmapComplete` |
+| 5 | Swap 인프라 | `m5-username-swapInfra` |
+| 6 | Swap 완성 | `m6-username-swapComplete` |
+| 7 | Copy-on-Write (Extra) | `m7-username-cow` |
 
 ## Commit Convention
 
@@ -86,7 +86,7 @@ fix: Fix page alignment issue in spt_find_page
 ```bash
 git checkout develop
 git pull origin develop
-git checkout -b milestone/1-vmInfra
+git checkout -b m1-username-vmInfra
 ```
 
 ### 2. 작업 및 커밋 (Phase별)
@@ -108,7 +108,7 @@ git commit -m "feat: Implement spt_insert_page"
 ### 3. Push 및 PR 생성
 
 ```bash
-git push origin milestone/1-vmInfra
+git push origin m1-username-vmInfra
 ```
 
 PR 생성 시:
