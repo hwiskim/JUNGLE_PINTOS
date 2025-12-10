@@ -1,13 +1,22 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
-#include "threads/malloc.h"
-#include "vm/vm.h"
-#include "vm/inspect.h"
 #include "hash.h"
-#include "threads/vaddr.h"
+#include "list.h"
 #include "string.h"
+#include "threads/malloc.h"
+#include "threads/mmu.h"
+#include "threads/synch.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "vm/inspect.h"
+#include <stdint.h>
+#include "vm/vm.h"
 #define STACK_MAX_SIZE (1 << 20)
+
+static struct list frame_table;
+static struct lock frame_lock;
+static struct list_elem* next;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -21,6 +30,8 @@ void vm_init(void)
     register_inspect_intr();
     /* DO NOT MODIFY UPPER LINES. */
     /* TODO: Your code goes here. */
+    list_init(&frame_table);
+    lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -38,9 +49,12 @@ enum vm_type page_get_type(struct page* page)
 }
 
 /* Helpers */
-static struct frame* vm_get_victim(void);
 static bool vm_do_claim_page(struct page* page);
 static struct frame* vm_evict_frame(void);
+static bool rollback_claim(struct thread* current, struct frame* frame, struct page* page, bool mapping_set);
+static struct frame* vm_get_victim(void);
+static struct frame* clock(struct list_elem* start);
+static struct list_elem* get_next(struct list_elem* elem);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -72,16 +86,19 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void* upage, bool writabl
         }
         uninit_new(p, upage, init, type, aux, page_initializer);
         p->writable = writable;
-        return spt_insert_page(spt, p);
+        p->accessible_thread = thread_current();
+        if (!spt_insert_page(spt, p)) {
+            free(p);
+            return false;
+        }
+        return true;
     }
-err:
     return false;
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
 struct page* spt_find_page(struct supplemental_page_table* spt, void* va)
 {
-    struct page* page = NULL;
     /* TODO: Fill this function. */
     struct hash_elem* hash_e;
     struct page tmp_page;
@@ -109,12 +126,81 @@ void spt_remove_page(struct supplemental_page_table* spt, struct page* page)
     return;
 }
 
+static struct list_elem* get_next(struct list_elem* elem)
+{
+    struct list_elem* next_elem = list_next(elem);
+    if (next_elem == list_end(&frame_table))
+        next_elem = list_begin(&frame_table);
+    return next_elem;
+}
+
 /* Get the struct frame, that will be evicted. */
 static struct frame* vm_get_victim(void)
 {
-    struct frame* victim = NULL;
-    /* TODO: The policy for eviction is up to you. */
+    ASSERT(!list_empty(&frame_table));
+    if (next == NULL || next == list_end(&frame_table))
+        next = list_begin(&frame_table);
 
+    struct list_elem* start = next;
+    return clock(start);
+}
+
+static struct frame* clock(struct list_elem* start)
+{
+    ASSERT(!list_empty(&frame_table));
+    struct frame* victim = NULL;
+    /*
+        eviction 우선순위
+          1) 비어있는 프레임
+          2) 접근 비트 0인 페이지
+             - dirty 0 우선, 그래도 없으면 dirty 1
+          3) 접근 비트 1이면 접근 비트를 0으로 내리고 다음으로 이동
+
+        trial 의미
+          - 첫 바퀴(trial=0)에서 못 찾는 경우:
+              * 모든 페이지가 accessed=1이어서 모두 0으로 내린 상황
+              * accessed=0이더라도 모두 dirty=1인 경우
+          - 두 번째 바퀴(trial=1)에서는 accessed=0인 페이지를 dirty 여부와 상관없이 처음 만나는 대로 선택
+
+        → second chance 개념을 clock으로 구현
+    */
+    for (int trial = 0; trial < 2 && victim == NULL; trial++) {
+        do {
+            struct frame* f = list_entry(next, struct frame, frame_elem);
+            struct page* p = f->page;
+
+            if (p == NULL) {
+                victim = f;
+                break;
+            }
+
+            bool accessed = pml4_is_accessed(p->accessible_thread->pml4, p->va);
+            if (accessed) {
+                pml4_set_accessed(p->accessible_thread->pml4, p->va, false);
+            } else {
+                if (trial == 0) {
+                    if (!pml4_is_dirty(p->accessible_thread->pml4, p->va)) {
+                        victim = f;
+                        break;
+                    }
+                } else {
+                    victim = f;
+                    break;
+                }
+            }
+
+            next = get_next(next);
+        } while (next != start);
+
+        if (victim == NULL) {
+            next = get_next(start);
+            start = next;
+        }
+    }
+
+    if (victim != NULL) {
+        next = get_next(&victim->frame_elem);
+    }
     return victim;
 }
 
@@ -122,10 +208,14 @@ static struct frame* vm_get_victim(void)
  * Return NULL on error.*/
 static struct frame* vm_evict_frame(void)
 {
-    struct frame* victim UNUSED = vm_get_victim();
+    struct frame* victim = vm_get_victim();
     /* TODO: swap out the victim and return the evicted frame. */
 
-    return NULL;
+    if (victim == NULL || !swap_out(victim->page))
+        return NULL;
+
+    victim->page = NULL;
+    return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -138,7 +228,7 @@ static struct frame* vm_get_frame(void)
     /* TODO: Fill this function. */
     void* kva = palloc_get_page(PAL_USER);
     if (kva == NULL) {
-        PANIC("todo");
+        return vm_evict_frame();
     }
     frame = (struct frame*)malloc(sizeof(struct frame));
     if (frame == NULL) {
@@ -147,6 +237,7 @@ static struct frame* vm_get_frame(void)
     }
     frame->kva = kva;
     frame->page = NULL;
+    frame->in_table = false;
     ASSERT(frame->page == NULL);
     return frame;
 }
@@ -174,7 +265,7 @@ bool vm_try_handle_fault(struct intr_frame* f, void* addr, bool user, bool write
     if (is_kernel_vaddr(addr))
         return false;
     if (not_present) {
-        void* rsp = f->rsp;
+        uintptr_t rsp = f->rsp;
         if (!user)
             rsp = thread_current()->rsp;
         if ((USER_STACK - STACK_MAX_SIZE <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK) ||
@@ -214,6 +305,14 @@ bool vm_claim_page(void* va)
 static bool vm_do_claim_page(struct page* page)
 {
     struct frame* frame = vm_get_frame();
+    if (frame == NULL)
+        return false;
+    if (!frame->in_table) {
+        lock_acquire(&frame_lock);
+        list_push_back(&frame_table, &frame->frame_elem);
+        lock_release(&frame_lock);
+        frame->in_table = true;
+    }
 
     /* Set links */
     frame->page = page;
@@ -221,18 +320,22 @@ static bool vm_do_claim_page(struct page* page)
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
     struct thread* current = thread_current();
-    pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
+    if (!pml4_set_page(current->pml4, page->va, frame->kva, page->writable))
+        return rollback_claim(current, frame, page, false);
 
-    return swap_in(page, frame->kva);
+    if (!swap_in(page, frame->kva))
+        return rollback_claim(current, frame, page, true);
+
+    return true;
 }
 
-unsigned page_hash(const struct hash_elem* hash_e, void* aux)
+static uint64_t page_hash(const struct hash_elem* hash_e, void* aux UNUSED)
 {
     struct page* page = hash_entry(hash_e, struct page, hash_elem);
     return hash_bytes(&page->va, sizeof(page->va));
 }
 
-bool page_less(const struct hash_elem* a, const struct hash_elem* b, void* aux)
+static bool page_less(const struct hash_elem* a, const struct hash_elem* b, void* aux UNUSED)
 {
     struct page* page_a = hash_entry(a, struct page, hash_elem);
     struct page* page_b = hash_entry(b, struct page, hash_elem);
@@ -301,4 +404,31 @@ void hash_desroy_action(struct hash_elem* hash_elem, void* aux)
     struct page* page = hash_entry(hash_elem, struct page, hash_elem);
     destroy(page);
     free(page);
+}
+
+static bool rollback_claim(struct thread* current, struct frame* frame, struct page* page, bool mapping_set)
+{
+    if (mapping_set)
+        pml4_clear_page(current->pml4, page->va);
+
+    page->frame = NULL;
+    frame->page = NULL;
+
+    vm_free_frame(frame);
+    return false;
+}
+void vm_free_frame(struct frame* frame)
+{
+    ASSERT(frame != NULL);
+    ASSERT(frame->page == NULL);
+
+    if (frame->in_table) {
+        lock_acquire(&frame_lock);
+        list_remove(&frame->frame_elem);
+        lock_release(&frame_lock);
+        frame->in_table = false;
+    }
+
+    palloc_free_page(frame->kva);
+    free(frame);
 }
