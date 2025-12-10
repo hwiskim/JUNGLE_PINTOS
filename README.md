@@ -44,4 +44,4 @@ KAIST CS330 Pintos 커널의 develop 브랜치로, 프로젝트 3의 가상 메�
 4. 적절한 서브디렉터리에서 `make check`로 테스트를 실행합니다(예: `make -C vm check TEST=swap-basic`).
 
 ## 참고
-- Pintos 매뉴얼: https://casys-kaist.github.io/pintos-kaist/
+- Pintos VM 매뉴얼: https://casys-kaist.github.io/pintos-kaist/project3/introduction.html
